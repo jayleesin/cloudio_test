@@ -1,49 +1,35 @@
-# 사전 설치 : pip install flask pymysql requests
-from flask import Flask, render_template, request, redirect, url_for
-from bmi import BMICalculator
-from db import Database
-import atexit   # 애플리케이션 종료시 실행을 요청 (ex. DB연결 종료)
+from flask import Flask
+import atexit
 
-app = Flask(__name__)   # Flask 앱 초기화
-db = Database()   # DB 초기화
+# 1~4단계에서 분리한 모듈들을 Import 합니다.
+from config import config
+from backend.models.db import db
+from backend.routes.main_routes import main_bp
 
-# 애플리케이션 종료 시 DB 연결 종료
-atexit.register(db.close)
+def create_app(config_name='default'):
+    """
+    App Factory 함수: Flask 애플리케이션 인스턴스를 생성하고 초기화합니다.
+    """
+    app = Flask(__name__)
+    
+    # 1. 환경 설정 적용 (config.py의 설정 클래스를 앱에 주입)
+    app.config.from_object(config[config_name])
+    
+    # 2. 데이터베이스 초기화 (생성된 app 인스턴스와 DB를 연결)
+    db.init_app(app)
+    
+    # 애플리케이션 종료 시 DB 연결을 안전하게 닫도록 등록
+    atexit.register(db.close)
+    
+    # 3. Blueprint 등록 (분리해둔 URL 라우팅을 앱에 부착)
+    app.register_blueprint(main_bp)
+    
+    return app
 
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html')
-
-@app.route('/calculate', methods=['POST'])
-def calculate():
-    try:
-        weight = float(request.form['weight'])
-        height = float(request.form['height'])
-        
-        # 입력값 유효성 검사
-        if weight <= 0 or height <= 0:
-            return render_template('index.html', error="체중과 신장은 양수여야 합니다.")
-        
-        # BMI 계산
-        calculator = BMICalculator(weight, height)
-        result = calculator.get_result()
-        
-        # 데이터베이스에 저장
-        db.save_bmi_record(weight, height, result["bmi"], result["category"])
-        
-        return render_template('result.html', 
-                              bmi=result["bmi"], 
-                              category=result["category"],
-                              weight=weight,
-                              height=height)
-    except ValueError:
-        return render_template('index.html', error="유효한 숫자를 입력해주세요.")
-
-@app.route('/history')
-def history():
-    # 최근 BMI 기록 10개 가져오기
-    records = db.get_bmi_records(10)
-    return render_template('history.html', records=records)
-
+# 스크립트가 직접 실행될 때 구동되는 개발용 서버 설정
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # 개발(development) 모드로 앱 인스턴스 생성
+    app = create_app('development')
+    
+    # 실행 (debug 모드 여부는 config.py에서 이미 제어 중입니다)
+    app.run(host='0.0.0.0', port=5000)

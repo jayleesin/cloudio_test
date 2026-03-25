@@ -2,20 +2,26 @@ import pymysql
 from pymysql import Error
 
 class Database:
-    def __init__(self):
+    def __init__(self, app=None):
         self.connection = None
+        # 앱 인스턴스가 생성될 때 함께 전달되면 바로 초기화
+        if app is not None:
+            self.init_app(app)
+
+    def init_app(self, app):
+        """App Factory 패턴을 위한 DB 초기화 메서드"""
         try:
+            # config.py를 통해 로드된 app.config의 환경 변수 활용
             self.connection = pymysql.connect(
-                # host='localhost',
-                host='mariadb',  # cloudtype 사용 시
-                port=3306,   # cloudtype 사용 시
-                database='test',  # test 데이터베이스 사용
-                user='root',
-                password='master',  # mariadb 설치 당시의 패스워드, 실제 환경에서는 보안을 위해 환경변수 등을 사용
+                host=app.config.get('DB_HOST'),
+                port=app.config.get('DB_PORT'),
+                database=app.config.get('DB_NAME'),
+                user=app.config.get('DB_USER'),
+                password=app.config.get('DB_PASSWORD'),
                 charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor   # 쿼리 결과를 딕셔너리로 변환
+                cursorclass=pymysql.cursors.DictCursor
             )
-            print("MariaDB에 성공적으로 연결되었습니다.")
+            print("MariaDB에 성공적으로 연결되었습니다. (환경 변수 적용 완료)")
         except Error as e:
             print(f"MariaDB 연결 중 오류 발생: {e}")
 
@@ -34,7 +40,6 @@ class Database:
                 cursor.execute(query, (weight, height, bmi, category))
             
             self.connection.commit()
-            print("BMI 기록이 성공적으로 저장되었습니다.")
             return True
         except Error as e:
             print(f"데이터 저장 중 오류 발생: {e}")
@@ -54,9 +59,7 @@ class Database:
                 LIMIT %s
                 """
                 cursor.execute(query, (limit,))
-                records = cursor.fetchall()
-            
-            return records
+                return cursor.fetchall()
         except Error as e:
             print(f"데이터 조회 중 오류 발생: {e}")
             return []
@@ -66,3 +69,6 @@ class Database:
         if self.connection:
             self.connection.close()
             print("MariaDB 연결이 종료되었습니다.")
+
+# 전역 DB 인스턴스 생성 (다른 모듈에서 import하여 사용)
+db = Database()
